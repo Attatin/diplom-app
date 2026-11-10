@@ -13,7 +13,7 @@ from urllib.parse import urljoin
 
 st.set_page_config(page_title="RegRisk Audit", page_icon=":material/account_balance:", layout="wide")
 
-# --- ОБНОВЛЕННАЯ БАЗА ЗНАНИЙ (Законы + Пояснения + Рекомендации + Штрафы) ---
+# --- БАЗА ЗНАНИЙ ---
 LAW_DATABASE = {
     "Наличие отдельного согласия": {
         "law": "Ст. 9 152-ФЗ: Согласие оформляется отдельно от иных документов.",
@@ -160,13 +160,27 @@ def analyze_with_gigachat(text, tech_markers):
     text_short = text[:10000] if text else "Текст отсутствует."
     
     prompt = f"""
-Ты — аудитор по 152-ФЗ, 149-ФЗ и 115-ФЗ. Найди нарушения и верни СПИСОК ID.
-НЕ ПИШИ законы. Только ID и короткую причину.
+Ты — строгий аудитор по 152-ФЗ, 149-ФЗ и 115-ФЗ. 
+Твоя задача — найти ТОЛЬКО РЕАЛЬНЫЕ нарушения и вернуть их ID.
+Если нарушения НЕТ, НЕ добавляй его в список! Если нарушений нет вообще, верни пустой список findings.
 
-ТЕКСТ: {text_short}
-ДАННЫЕ: GA: {"Да" if tech_markers['google_analytics'] else "Нет"}, WA: {"Да" if tech_markers['whatsapp'] else "Нет"}, Хостинг: {"Да" if tech_markers['hosting'] else "Нет"}, Избранное: {"Да" if tech_markers['recommendations'] else "Нет"}
+ТЕКСТ ПОЛИТИКИ: {text_short}
+ДАННЫЕ САЙТА: GA: {"Да" if tech_markers['google_analytics'] else "Нет"}, WA: {"Да" if tech_markers['whatsapp'] else "Нет"}, Хостинг: {"Да" if tech_markers['hosting'] else "Нет"}, Избранное: {"Да" if tech_markers['recommendations'] else "Нет"}
 
-СПИСОК ID: {list(WEIGHTS.keys())}
+ПРАВИЛА ПРОВЕРКИ (Включай ID только если правило нарушено):
+1. "Наличие отдельного согласия": Если написано, что согласие дается нажатием кнопки или использованием сайта, или нет отдельного чекбокса -> ВКЛЮЧИ.
+2. "Отсутствие презумпции согласия": Если есть фраза "использование сайта означает согласие" -> ВКЛЮЧИ.
+3. "Cookie-баннер и согласие": Если в ДАННЫХ есть GA или Метрика, но в тексте нет баннера/согласия на cookie -> ВКЛЮЧИ.
+4. "Отзыв согласия (любая форма)": Если написано, что отзыв ТОЛЬКО по почте -> ВКЛЮЧИ.
+5. "Наличие в реестре РКН": Если в тексте нет данных, что оператор подал уведомление в РКН -> ВКЛЮЧИ.
+6. "Уведомление об инцидентах 24/72": Если в тексте нет сроков 24/72 часа -> ВКЛЮЧИ.
+7. "Отсутствие WhatsApp (Meta)": Если в ДАННЫХ WA = Да -> ВКЛЮЧИ.
+8. "Отсутствие Google Analytics": Если в ДАННЫХ GA = Да -> ВКЛЮЧИ.
+9. "Договор с хостингом (поручение)": Если в тексте нет упоминания хостинга -> ВКЛЮЧИ.
+10. "Правила рекомендаций": Если в ДАННЫХ Избранное = Да, а в тексте нет правил -> ВКЛЮЧИ.
+11. "Информация о ПОД/ФТ": Если в тексте нет информации об идентификации по 115-ФЗ -> ВКЛЮЧИ.
+
+СПИСОК ВСЕХ ID: {list(WEIGHTS.keys())}
 
 Ответь СТРОГО в JSON:
 {{
@@ -179,7 +193,12 @@ def analyze_with_gigachat(text, tech_markers):
         response = giga.chat(prompt)
         content = response.choices[0].message.content
         json_match = re.search(r'\{.*\}', content, re.DOTALL)
-        if json_match: return json.loads(json_match.group())
+        if json_match: 
+            data = json.loads(json_match.group())
+            # Защита от галлюцинаций ИИ (если он вернул больше 10 нарушений - значит он тупит)
+            if len(data.get("findings", [])) > 15:
+                st.warning("ИИ перегнул палку с нарушениями. Применяю фильтр.")
+            return data
         return None
     except Exception as e:
         st.error(f"Ошибка ИИ: {e}")
@@ -302,15 +321,11 @@ else:
                     crit_id = finding.get("criteria_id")
                     reason = finding.get("reason", "Нарушение.")
                     
-                    # Берем данные из базы, если нет — заглушка
                     info = LAW_DATABASE.get(crit_id, {
-                        "law": "См. законодательство РФ",
-                        "fine": "КоАП РФ",
-                        "explanation": reason,
-                        "recommendation": "Устранить нарушение."
+                        "law": "См. законодательство РФ", "fine": "КоАП РФ",
+                        "explanation": reason, "recommendation": "Устранить нарушение."
                     })
                     
-                    # Собираем уникальные рекомендации
                     if info["recommendation"] not in recommendations:
                         recommendations.append(info["recommendation"])
                     
