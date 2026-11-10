@@ -11,10 +11,8 @@ from gigachat import GigaChat
 import os
 from urllib.parse import urljoin
 
-# Настройка страницы
 st.set_page_config(page_title="RegRisk Audit", page_icon=":material/account_balance:", layout="wide")
 
-# --- ПОЛНАЯ БАЗА ЗНАНИЙ (Все 20 критериев) ---
 LAW_DATABASE = {
     "Наличие отдельного согласия": {"law": "Ст. 9 152-ФЗ: Согласие оформляется отдельно от иных документов.", "fine": "до 300 000 руб. (ч. 1 ст. 13.11 КоАП)"},
     "Отдельный чек-бокс согласия": {"law": "Ст. 9 152-ФЗ: Согласие должно быть конкретным и однозначным.", "fine": "до 300 000 руб. (ч. 1 ст. 13.11 КоАП)"},
@@ -112,40 +110,56 @@ def download_documents(url):
     return text, policy_link, consent_link, tech_markers, None
 
 def analyze_with_gigachat(text, tech_markers):
-    text_short = text[:10000] if text else "Текст отсутствует."
+    text_short = text[:12000] if text else "Текст отсутствует."
     
-    # ЖЕСТКИЙ ПРОМПТ: Только классификация 1/0
+    # УМНЫЙ ПРОМПТ (С четкими инструкциями)
     prompt = f"""
-Ты — программа-классификатор. Твоя задача — проверить текст и поставить 1 (если нарушение ЕСТЬ) или 0 (если нарушения НЕТ).
-НЕ ВЫДУМЫВАЙ нарушения. Если в тексте нет прямого доказательства нарушения, ставь 0.
+Ты — аудитор. Проверь текст и поставь 1, если нарушение ЕСТЬ, и 0, если нарушения НЕТ.
+Вот четкие правила, как проверять:
+
+1. "Наличие отдельного согласия": Если в тексте НЕТ отдельного документа согласия — ставь 1.
+2. "Отдельный чек-бокс согласия": Если в тексте написано про кнопку/галочку/чек-бокс — ставь 0. Если нет — 1.
+3. "Отсутствие презумпции согласия": Если есть фраза "использование сайта означает согласие" — ставь 1.
+4. "Cookie-баннер и согласие": Если в тексте есть слово "cookie" и описан баннер — 0. Если нет — 1.
+5. "Минимизация данных": Если в тексте есть список целей и данных — 0. Если нет — 1.
+6. "Отзыв согласия (любая форма)": Если написано "только по почте" — 1. Если можно отозвать на сайте — 0.
+7. "Наличие в реестре РКН": Если в тексте упоминается реестр/номер — 0. Если нет — 1.
+8. "Уведомление об инцидентах 24/72": Если есть слова "24 часа", "72 часа", "инцидент" — 0. Если нет — 1.
+9. "Информация о ПОД/ФТ": Если есть раздел про 115-ФЗ или идентификацию — 0. Если нет — 1.
+10. "Порядок обращений субъектов": Если описан порядок отправки запросов (email, адрес) — 0. Если нет — 1.
+11. "Сроки хранения (конкретные)": Если указаны конкретные сроки (например, "5 лет") — 0. Если "до достижения цели" — 1.
+12. "Оценка вреда": Если есть раздел про оценку вреда — 0. Если нет — 1.
+13. "Локализация БД": Если есть фраза "базы данных на территории РФ" — 0. Если нет — 1.
+14. "Контакты ответственного": Если указано ФИО ответственного или его email — 0. Если нет — 1.
+15. "Договор с хостингом (поручение)": Если упоминается хостинг/поручение — 0. Если нет — 1.
+16. "Согласие работников на ФИО": Если в тексте есть раздел про работников — 0. Если нет — 1.
+17. "Отдельное согласие на рекламу": Если упоминается отдельное согласие на рекламу — 0. Если нет — 1.
 
 ТЕКСТ: {text_short}
-ДАННЫЕ СКАНИРОВАНИЯ: GA: {"Да" if tech_markers['google_analytics'] else "Нет"}, WA: {"Да" if tech_markers['whatsapp'] else "Нет"}, Хостинг: {"Да" if tech_markers['hosting'] else "Нет"}, Избранное: {"Да" if tech_markers['recommendations'] else "Нет"}
+ДАННЫЕ: GA: {"Да" if tech_markers['google_analytics'] else "Нет"}, WA: {"Да" if tech_markers['whatsapp'] else "Нет"}, Хостинг: {"Да" if tech_markers['hosting'] else "Нет"}, Избранное: {"Да" if tech_markers['recommendations'] else "Нет"}
 
-СПИСОК КРИТЕРИЕВ: {list(WEIGHTS.keys())}
-
-Ответь СТРОГО в формате JSON (ключ = критерий, значение = 1 или 0):
+Ответь СТРОГО в формате JSON (ключ = название, значение = 1 или 0):
 {{
-  "Наличие отдельного согласия": 1 или 0,
-  "Отдельный чек-бокс согласия": 1 или 0,
-  "Отсутствие презумпции согласия": 1 или 0,
-  "Cookie-баннер и согласие": 1 или 0,
-  "Минимизация данных": 1 или 0,
-  "Отзыв согласия (любая форма)": 1 или 0,
-  "Наличие в реестре РКН": 1 или 0,
-  "Уведомление об инцидентах 24/72": 1 или 0,
-  "Отсутствие WhatsApp (Meta)": 1 или 0,
-  "Отсутствие Google Analytics": 1 или 0,
-  "Информация о ПОД/ФТ": 1 или 0,
-  "Порядок обращений субъектов": 1 или 0,
-  "Сроки хранения (конкретные)": 1 или 0,
-  "Оценка вреда": 1 или 0,
-  "Локализация БД": 1 или 0,
-  "Контакты ответственного": 1 или 0,
-  "Договор с хостингом (поручение)": 1 или 0,
-  "Правила рекомендаций": 1 или 0,
-  "Согласие работников на ФИО": 1 или 0,
-  "Отдельное согласие на рекламу": 1 или 0
+  "Наличие отдельного согласия": 1,
+  "Отдельный чек-бокс согласия": 1,
+  "Отсутствие презумпции согласия": 1,
+  "Cookie-баннер и согласие": 1,
+  "Минимизация данных": 1,
+  "Отзыв согласия (любая форма)": 1,
+  "Наличие в реестре РКН": 1,
+  "Уведомление об инцидентах 24/72": 1,
+  "Отсутствие WhatsApp (Meta)": 1,
+  "Отсутствие Google Analytics": 1,
+  "Информация о ПОД/ФТ": 1,
+  "Порядок обращений субъектов": 1,
+  "Сроки хранения (конкретные)": 1,
+  "Оценка вреда": 1,
+  "Локализация БД": 1,
+  "Контакты ответственного": 1,
+  "Договор с хостингом (поручение)": 1,
+  "Правила рекомендаций": 1,
+  "Согласие работников на ФИО": 1,
+  "Отдельное согласие на рекламу": 1
 }}
 """
     try:
@@ -159,11 +173,22 @@ def analyze_with_gigachat(text, tech_markers):
         st.error(f"Ошибка ИИ: {e}")
         return None
 
-def calculate_risk(criteria_results):
+def get_final_results(ai_result, tech_markers):
+    """Гибридная логика: ИИ + технические маркеры"""
+    final = ai_result.copy() if ai_result else {k: 0 for k in WEIGHTS.keys()}
+    
+    # Принудительно ставим нарушения, если техника их нашла
+    if tech_markers['google_analytics']: final["Отсутствие Google Analytics"] = 1
+    if tech_markers['whatsapp']: final["Отсутствие WhatsApp (Meta)"] = 1
+    if tech_markers['recommendations']: final["Правила рекомендаций"] = 1
+    
+    return final
+
+def calculate_risk(final_results):
     risk = 0.0
     total_weight = sum(WEIGHTS.values())
     for criterion, weight in WEIGHTS.items():
-        if criteria_results.get(criterion) == 1:
+        if final_results.get(criterion) == 1:
             risk += weight
     return round(risk / total_weight, 2) if total_weight > 0 else 0
 
@@ -213,10 +238,11 @@ else:
         st.error(f"Критическая ошибка: {error}")
     else:
         with st.spinner("Формирование заключения..."):
-            ai_result = analyze_with_gigachat(text, tech_markers)
+            ai_raw = analyze_with_gigachat(text, tech_markers)
+            final_results = get_final_results(ai_raw, tech_markers)
 
-        if ai_result:
-            final_risk = calculate_risk(ai_result)
+        if final_results:
+            final_risk = calculate_risk(final_results)
             level_text, delta_col = get_risk_level(final_risk)
             
             st.title("Отчет об аудите")
@@ -253,7 +279,7 @@ else:
                 with col_metrics:
                     st.markdown("### Итоги")
                     st.metric(label="Интегральный риск", value=f"{final_risk:.2f}", delta=level_text, delta_color=delta_col)
-                    violations_count = sum(1 for v in ai_result.values() if v == 1)
+                    violations_count = sum(1 for v in final_results.values() if v == 1)
                     st.metric(label="Выявлено нарушений", value=violations_count)
 
             with tab2:
@@ -261,7 +287,7 @@ else:
                 st.latex(r"R = \frac{\sum (W_i \times r_i)}{\sum W_i}")
                 data = []
                 for crit, weight in WEIGHTS.items():
-                    is_viol = 1 if ai_result.get(crit) == 1 else 0
+                    is_viol = final_results.get(crit, 0)
                     data.append({"Критерий": crit, "Вес (W)": weight, "Факт (1/0)": is_viol, "Вклад": weight if is_viol == 1 else 0})
                 
                 df = pd.DataFrame(data)
@@ -270,7 +296,7 @@ else:
             with tab3:
                 st.subheader("Заключение")
                 violations_found = False
-                for idx, (crit, val) in enumerate(ai_result.items(), 1):
+                for idx, (crit, val) in enumerate(final_results.items(), 1):
                     if val == 1:
                         violations_found = True
                         law_info = LAW_DATABASE.get(crit, {"law": "См. законодательство РФ", "fine": "КоАП РФ"})
@@ -280,4 +306,4 @@ else:
                             st.markdown(f"**Штраф:** :red[**{law_info['fine']}**]")
                 
                 if not violations_found:
-                    st.success("Нарушений не выявлено. Сайт соответствует требованиям.")
+                    st.success("Нарушений не выявлено.")
