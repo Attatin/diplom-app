@@ -39,16 +39,15 @@ WEIGHTS = {
     "Локализация БД": 0.05
 }
 
-# --- 3. Подключение к GigaChat ---
-@st.cache_resource
 import os
 
+# --- Подключение к GigaChat ---
 @st.cache_resource
 def get_gigachat():
-    # Пытаемся взять ключ из переменных окружения Layero
+    # Пытаемся взять ключ из переменных окружения (Layero)
     key = os.environ.get("GIGACHAT_KEY")
     
-    # Если нет, пробуем взять из секретов Streamlit (на всякий случай)
+    # Если нет, пробуем взять из секретов Streamlit
     if not key:
         try:
             key = st.secrets["GIGACHAT_KEY"]
