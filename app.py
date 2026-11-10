@@ -14,19 +14,28 @@ from urllib.parse import urljoin
 # Настройка страницы
 st.set_page_config(page_title="RegRisk Audit", page_icon=":material/account_balance:", layout="wide")
 
-# --- ЖЕСТКАЯ БАЗА ЗНАНИЙ (152-ФЗ, 149-ФЗ, 115-ФЗ + КоАП) ---
+# --- ПОЛНАЯ БАЗА ЗНАНИЙ (Все 20 критериев) ---
 LAW_DATABASE = {
     "Наличие отдельного согласия": {"law": "Ст. 9 152-ФЗ: Согласие оформляется отдельно от иных документов.", "fine": "до 300 000 руб. (ч. 1 ст. 13.11 КоАП)"},
-    "Отсутствие презумпции согласия": {"law": "Ст. 9 152-ФЗ: Согласие должно быть конкретным и однозначным.", "fine": "до 300 000 руб. (ч. 1 ст. 13.11 КоАП)"},
+    "Отдельный чек-бокс согласия": {"law": "Ст. 9 152-ФЗ: Согласие должно быть конкретным и однозначным.", "fine": "до 300 000 руб. (ч. 1 ст. 13.11 КоАП)"},
+    "Отсутствие презумпции согласия": {"law": "Ст. 9 152-ФЗ: Молчание или бездействие не является согласием.", "fine": "до 300 000 руб. (ч. 1 ст. 13.11 КоАП)"},
     "Cookie-баннер и согласие": {"law": "Ст. 9 152-ФЗ: Использование cookie требует предварительного согласия.", "fine": "до 300 000 руб. (ч. 1 ст. 13.11 КоАП)"},
+    "Минимизация данных": {"law": "Ст. 5 ч. 5 152-ФЗ: Данные не должны быть избыточными.", "fine": "до 300 000 руб. (ч. 1 ст. 13.11 КоАП)"},
     "Отзыв согласия (любая форма)": {"law": "Ст. 9 152-ФЗ: Согласие может быть отозвано в любой момент.", "fine": "до 300 000 руб. (ч. 1 ст. 13.11 КоАП)"},
+    "Наличие в реестре РКН": {"law": "Ст. 22 152-ФЗ: Оператор обязан уведомить РКН.", "fine": "до 300 000 руб. (ст. 13.11 КоАП)"},
+    "Уведомление об инцидентах 24/72": {"law": "Ст. 21 ч. 3.1 152-ФЗ: Уведомление РКН об инцидентах (24 и 72 часа).", "fine": "до 3 000 000 руб. (ч. 8 ст. 13.11 КоАП)"},
     "Отсутствие WhatsApp (Meta)": {"law": "Ст. 10.2-1 149-ФЗ / Закон о рекламе", "fine": "до 1 000 000 руб. (ст. 13.15 КоАП)"},
     "Отсутствие Google Analytics": {"law": "Ст. 12 152-ФЗ: До начала трансграничной передачи нужно уведомить РКН.", "fine": "до 300 000 руб. (ст. 13.11 КоАП)"},
-    "Договор с хостингом (поручение)": {"law": "Ст. 6 ч. 3 152-ФЗ: Поручение обработки ПДн оформляется договором.", "fine": "до 300 000 руб. (ст. 13.11 КоАП)"},
-    "Правила рекомендаций": {"law": "Ст. 10.2-1 149-ФЗ: Владелец сайта обязан разместить правила применения рекомендательных технологий.", "fine": "до 300 000 руб. (ст. 13.11 КоАП)"},
-    "Уведомление об инцидентах 24/72": {"law": "Ст. 21 ч. 3.1 152-ФЗ: Уведомление РКН об инцидентах (24 и 72 часа).", "fine": "до 3 000 000 руб. (ч. 8 ст. 13.11 КоАП)"},
     "Информация о ПОД/ФТ": {"law": "Ст. 7 115-ФЗ: Обязанность идентификации клиентов.", "fine": "до 1 000 000 руб. (ст. 15.27 КоАП)"},
-    "Наличие в реестре РКН": {"law": "Ст. 22 152-ФЗ: Оператор обязан уведомить РКН.", "fine": "до 300 000 руб. (ст. 13.11 КоАП)"}
+    "Порядок обращений субъектов": {"law": "Ст. 20 152-ФЗ: Обязанность сообщать информацию по запросу.", "fine": "до 300 000 руб. (ст. 13.11 КоАП)"},
+    "Сроки хранения (конкретные)": {"law": "Ст. 5 ч. 7 152-ФЗ: Хранение не дольше, чем требуют цели.", "fine": "до 300 000 руб. (ст. 13.11 КоАП)"},
+    "Оценка вреда": {"law": "Ст. 18.1 ч. 1 п. 5 152-ФЗ: Оценка вреда субъектам.", "fine": "до 300 000 руб. (ст. 13.11 КоАП)"},
+    "Локализация БД": {"law": "Ст. 18 ч. 5 152-ФЗ: Базы данных должны быть в РФ.", "fine": "до 1 000 000 руб. (ч. 8 ст. 13.11 КоАП)"},
+    "Контакты ответственного": {"law": "Ст. 18.1 ч. 1 п. 1 152-ФЗ: Назначение ответственного.", "fine": "до 300 000 руб. (ст. 13.11 КоАП)"},
+    "Договор с хостингом (поручение)": {"law": "Ст. 6 ч. 3 152-ФЗ: Поручение обработки ПДн оформляется договором.", "fine": "до 300 000 руб. (ст. 13.11 КоАП)"},
+    "Правила рекомендаций": {"law": "Ст. 10.2-1 149-ФЗ: Правила применения рекомендательных технологий.", "fine": "до 300 000 руб. (ст. 13.11 КоАП)"},
+    "Согласие работников на ФИО": {"law": "Ст. 9 152-ФЗ: Согласие на публикацию данных работников.", "fine": "до 300 000 руб. (ст. 13.11 КоАП)"},
+    "Отдельное согласие на рекламу": {"law": "Ст. 15 152-ФЗ / Ст. 18 38-ФЗ: Согласие на рекламу.", "fine": "до 500 000 руб. (ст. 14.3 КоАП)"}
 }
 
 WEIGHTS = {
@@ -105,39 +114,57 @@ def download_documents(url):
 def analyze_with_gigachat(text, tech_markers):
     text_short = text[:10000] if text else "Текст отсутствует."
     
+    # ЖЕСТКИЙ ПРОМПТ: Только классификация 1/0
     prompt = f"""
-Ты — аудитор по 152-ФЗ, 149-ФЗ и 115-ФЗ. Найди нарушения и верни СПИСОК ID.
-НЕ ПИШИ законы. Только ID и короткую причину.
+Ты — программа-классификатор. Твоя задача — проверить текст и поставить 1 (если нарушение ЕСТЬ) или 0 (если нарушения НЕТ).
+НЕ ВЫДУМЫВАЙ нарушения. Если в тексте нет прямого доказательства нарушения, ставь 0.
 
 ТЕКСТ: {text_short}
-ДАННЫЕ: GA: {"Да" if tech_markers['google_analytics'] else "Нет"}, WA: {"Да" if tech_markers['whatsapp'] else "Нет"}, Хостинг: {"Да" if tech_markers['hosting'] else "Нет"}, Избранное: {"Да" if tech_markers['recommendations'] else "Нет"}
+ДАННЫЕ СКАНИРОВАНИЯ: GA: {"Да" if tech_markers['google_analytics'] else "Нет"}, WA: {"Да" if tech_markers['whatsapp'] else "Нет"}, Хостинг: {"Да" if tech_markers['hosting'] else "Нет"}, Избранное: {"Да" if tech_markers['recommendations'] else "Нет"}
 
-СПИСОК ID: {list(WEIGHTS.keys())}
+СПИСОК КРИТЕРИЕВ: {list(WEIGHTS.keys())}
 
-Ответь СТРОГО в JSON:
+Ответь СТРОГО в формате JSON (ключ = критерий, значение = 1 или 0):
 {{
-  "findings": [
-    {{ "criteria_id": "ТОЧНОЕ НАЗВАНИЕ ИЗ СПИСКА", "reason": "Короткая причина (до 15 слов)" }}
-  ],
-  "recommendations": ["Действие 1", "Действие 2"]
+  "Наличие отдельного согласия": 1 или 0,
+  "Отдельный чек-бокс согласия": 1 или 0,
+  "Отсутствие презумпции согласия": 1 или 0,
+  "Cookie-баннер и согласие": 1 или 0,
+  "Минимизация данных": 1 или 0,
+  "Отзыв согласия (любая форма)": 1 или 0,
+  "Наличие в реестре РКН": 1 или 0,
+  "Уведомление об инцидентах 24/72": 1 или 0,
+  "Отсутствие WhatsApp (Meta)": 1 или 0,
+  "Отсутствие Google Analytics": 1 или 0,
+  "Информация о ПОД/ФТ": 1 или 0,
+  "Порядок обращений субъектов": 1 или 0,
+  "Сроки хранения (конкретные)": 1 или 0,
+  "Оценка вреда": 1 или 0,
+  "Локализация БД": 1 или 0,
+  "Контакты ответственного": 1 или 0,
+  "Договор с хостингом (поручение)": 1 или 0,
+  "Правила рекомендаций": 1 или 0,
+  "Согласие работников на ФИО": 1 или 0,
+  "Отдельное согласие на рекламу": 1 или 0
 }}
 """
     try:
         response = giga.chat(prompt)
         content = response.choices[0].message.content
         json_match = re.search(r'\{.*\}', content, re.DOTALL)
-        if json_match: return json.loads(json_match.group())
+        if json_match: 
+            return json.loads(json_match.group())
         return None
     except Exception as e:
         st.error(f"Ошибка ИИ: {e}")
         return None
 
-def calculate_risk(findings):
+def calculate_risk(criteria_results):
     risk = 0.0
     total_weight = sum(WEIGHTS.values())
-    found_ids = [f.get("criteria_id") for f in findings]
     for criterion, weight in WEIGHTS.items():
-        if criterion in found_ids: risk += weight
+        if criteria_results.get(criterion) == 1:
+            risk += weight
     return round(risk / total_weight, 2) if total_weight > 0 else 0
 
 def get_risk_level(risk):
@@ -150,12 +177,10 @@ def get_risk_level(risk):
 # ИНТЕРФЕЙС
 # ==========================================
 
-# Стартовая страница, если аудит еще не запущен
 if "audit_started" not in st.session_state:
     st.session_state.audit_started = False
 
 if not st.session_state.audit_started:
-    # Центрируем контент
     col1, col2, col3 = st.columns([1, 2, 1])
     with col2:
         st.title(":material/account_balance: RegRisk Audit")
@@ -163,8 +188,6 @@ if not st.session_state.audit_started:
         Система автоматизированного аудита веб-ресурсов на соответствие требованиям 
         **152-ФЗ**, **149-ФЗ** и **115-ФЗ**.
         """)
-        st.write("")
-        
         with st.container(border=True):
             st.subheader("Начать проверку")
             url_input = st.text_input("URL-адрес сайта", placeholder="https://example.ru")
@@ -176,10 +199,8 @@ if not st.session_state.audit_started:
                 else:
                     st.error("Введите URL")
 else:
-    # Экран результатов
     url_input = st.session_state.url_to_check
     
-    # Кнопка "Назад" в углу
     if st.button("← Новый аудит", type="secondary"):
         st.session_state.audit_started = False
         st.session_state.url_to_check = ""
@@ -195,13 +216,11 @@ else:
             ai_result = analyze_with_gigachat(text, tech_markers)
 
         if ai_result:
-            findings = ai_result.get("findings", [])
-            final_risk = calculate_risk(findings)
+            final_risk = calculate_risk(ai_result)
             level_text, delta_col = get_risk_level(final_risk)
             
             st.title("Отчет об аудите")
             
-            # Плашки со ссылками
             c1, c2, c3 = st.columns(3)
             with c1: st.info(f"**Объект:** [{url_input}]({url_input})")
             with c2: 
@@ -234,35 +253,31 @@ else:
                 with col_metrics:
                     st.markdown("### Итоги")
                     st.metric(label="Интегральный риск", value=f"{final_risk:.2f}", delta=level_text, delta_color=delta_col)
-                    st.metric(label="Нарушений", value=len(findings))
+                    violations_count = sum(1 for v in ai_result.values() if v == 1)
+                    st.metric(label="Выявлено нарушений", value=violations_count)
 
             with tab2:
                 st.subheader("Расчет риска")
                 st.latex(r"R = \frac{\sum (W_i \times r_i)}{\sum W_i}")
                 data = []
-                found_ids = [f.get("criteria_id") for f in findings]
                 for crit, weight in WEIGHTS.items():
-                    is_viol = 1 if crit in found_ids else 0
-                    data.append({"Критерий": crit, "Вес (W)": weight, "Факт": is_viol, "Вклад": weight if is_viol == 1 else 0})
+                    is_viol = 1 if ai_result.get(crit) == 1 else 0
+                    data.append({"Критерий": crit, "Вес (W)": weight, "Факт (1/0)": is_viol, "Вклад": weight if is_viol == 1 else 0})
                 
                 df = pd.DataFrame(data)
-                st.dataframe(df.style.apply(lambda x: ['background: #FEE2E2' if v == 1 else '' for v in x], subset=['Факт'], axis=1), use_container_width=True, hide_index=True)
+                st.dataframe(df.style.apply(lambda x: ['background: #FEE2E2' if v == 1 else '' for v in x], subset=['Факт (1/0)'], axis=1), use_container_width=True, hide_index=True)
 
             with tab3:
                 st.subheader("Заключение")
-                if not findings:
-                    st.success("Нарушений не выявлено.")
-                for idx, finding in enumerate(findings, 1):
-                    crit_id = finding.get("criteria_id")
-                    reason = finding.get("reason", "Нарушение.")
-                    law_info = LAW_DATABASE.get(crit_id, {"law": "См. законодательство РФ", "fine": "КоАП РФ"})
-                    
-                    with st.expander(f"{idx}. {crit_id}", expanded=True):
-                        st.markdown(f"**Норма:** {law_info['law']}")
-                        st.markdown(f"**Штраф:** :red[**{law_info['fine']}**]")
-                        st.markdown(f"**Причина:** {reason}")
+                violations_found = False
+                for idx, (crit, val) in enumerate(ai_result.items(), 1):
+                    if val == 1:
+                        violations_found = True
+                        law_info = LAW_DATABASE.get(crit, {"law": "См. законодательство РФ", "fine": "КоАП РФ"})
+                        
+                        with st.expander(f"{idx}. {crit}", expanded=True):
+                            st.markdown(f"**Норма:** {law_info['law']}")
+                            st.markdown(f"**Штраф:** :red[**{law_info['fine']}**]")
                 
-                st.divider()
-                st.subheader("Рекомендации")
-                for rec in ai_result.get("recommendations", []):
-                    st.markdown(f"- {rec}")
+                if not violations_found:
+                    st.success("Нарушений не выявлено. Сайт соответствует требованиям.")
