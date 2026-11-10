@@ -11,18 +11,23 @@ from gigachat import GigaChat
 import os
 from urllib.parse import urljoin
 
+# Настройка страницы
 st.set_page_config(page_title="RegRisk Audit", page_icon=":material/account_balance:", layout="wide")
 
-# --- БАЗА ЗНАНИЙ ---
-LAW_BASE = """
-[152-ФЗ Статья 9. Согласие] Согласие должно быть конкретным, предметным, информированным и однозначным. Оформляется отдельно. (Штраф по ч. 1 ст. 13.11 КоАП: до 300 000 руб.)
-[152-ФЗ Статья 6. Поручение] Оператор вправе поручить обработку ПДн другому лицу (например, хостингу) на основании договора.
-[152-ФЗ Статья 12. Трансгранично] До начала трансграничной передачи (например, Google Analytics) нужно уведомить РКН.
-[152-ФЗ Статья 18.1. Политика] Оператор обязан опубликовать политику в свободном доступе. (Штраф по ст. 13.11 КоАП: до 60 000 руб.)
-[152-ФЗ Статья 21. Инциденты] Уведомление РКН: 24 часа (факт), 72 часа (результаты). (Штраф по ч. 8 ст. 13.11 КоАП: до 3 000 000 руб.)
-[149-ФЗ Статья 10.2-1. Рекомендации] Владелец сайта обязан разместить правила применения рекомендательных технологий.
-[38-ФЗ Статья 18. Реклама] Реклама по сетям связи только с предварительного согласия. (Штраф по ст. 14.3 КоАП: до 500 000 руб.)
-"""
+# --- ЖЕСТКАЯ БАЗА ЗНАНИЙ (152-ФЗ, 149-ФЗ, 115-ФЗ + КоАП) ---
+LAW_DATABASE = {
+    "Наличие отдельного согласия": {"law": "Ст. 9 152-ФЗ: Согласие оформляется отдельно от иных документов.", "fine": "до 300 000 руб. (ч. 1 ст. 13.11 КоАП)"},
+    "Отсутствие презумпции согласия": {"law": "Ст. 9 152-ФЗ: Согласие должно быть конкретным и однозначным.", "fine": "до 300 000 руб. (ч. 1 ст. 13.11 КоАП)"},
+    "Cookie-баннер и согласие": {"law": "Ст. 9 152-ФЗ: Использование cookie требует предварительного согласия.", "fine": "до 300 000 руб. (ч. 1 ст. 13.11 КоАП)"},
+    "Отзыв согласия (любая форма)": {"law": "Ст. 9 152-ФЗ: Согласие может быть отозвано в любой момент.", "fine": "до 300 000 руб. (ч. 1 ст. 13.11 КоАП)"},
+    "Отсутствие WhatsApp (Meta)": {"law": "Ст. 10.2-1 149-ФЗ / Закон о рекламе", "fine": "до 1 000 000 руб. (ст. 13.15 КоАП)"},
+    "Отсутствие Google Analytics": {"law": "Ст. 12 152-ФЗ: До начала трансграничной передачи нужно уведомить РКН.", "fine": "до 300 000 руб. (ст. 13.11 КоАП)"},
+    "Договор с хостингом (поручение)": {"law": "Ст. 6 ч. 3 152-ФЗ: Поручение обработки ПДн оформляется договором.", "fine": "до 300 000 руб. (ст. 13.11 КоАП)"},
+    "Правила рекомендаций": {"law": "Ст. 10.2-1 149-ФЗ: Владелец сайта обязан разместить правила применения рекомендательных технологий.", "fine": "до 300 000 руб. (ст. 13.11 КоАП)"},
+    "Уведомление об инцидентах 24/72": {"law": "Ст. 21 ч. 3.1 152-ФЗ: Уведомление РКН об инцидентах (24 и 72 часа).", "fine": "до 3 000 000 руб. (ч. 8 ст. 13.11 КоАП)"},
+    "Информация о ПОД/ФТ": {"law": "Ст. 7 115-ФЗ: Обязанность идентификации клиентов.", "fine": "до 1 000 000 руб. (ст. 15.27 КоАП)"},
+    "Наличие в реестре РКН": {"law": "Ст. 22 152-ФЗ: Оператор обязан уведомить РКН.", "fine": "до 300 000 руб. (ст. 13.11 КоАП)"}
+}
 
 WEIGHTS = {
     "Наличие отдельного согласия": 0.10, "Отдельный чек-бокс согласия": 0.10,
@@ -53,7 +58,7 @@ def download_documents(url):
         response = requests.get(url, headers=headers, timeout=20, verify=False)
         response.raise_for_status()
     except Exception as e:
-        return None, None, None, None, f"Ошибка доступа к сайту: {e}"
+        return None, None, None, None, f"Ошибка доступа: {e}"
 
     soup = BeautifulSoup(response.text, "html.parser")
     html_lower = response.text.lower()
@@ -77,21 +82,20 @@ def download_documents(url):
         if ("согласи" in text or "согласи" in href.lower()) and not consent_link:
             consent_link = full_link
 
-    # Если ссылка на согласие не найдена отдельно, но есть на политике - попробуем взять оттуда
     target_url = policy_link or consent_link or url
 
     try:
         r = requests.get(target_url, headers=headers, timeout=20, verify=False)
         r.raise_for_status()
     except Exception as e:
-        return None, policy_link, consent_link, tech_markers, f"Ошибка скачивания документа: {e}"
+        return None, policy_link, consent_link, tech_markers, f"Ошибка: {e}"
 
     if "pdf" in r.headers.get("Content-Type", "").lower() or target_url.lower().endswith(".pdf"):
         try:
             with pdfplumber.open(io.BytesIO(r.content)) as pdf:
                 text = "\n".join(page.extract_text() or "" for page in pdf.pages)
         except Exception as e:
-            return None, policy_link, consent_link, tech_markers, f"Ошибка чтения PDF: {e}"
+            return None, policy_link, consent_link, tech_markers, f"Ошибка PDF: {e}"
     else:
         soup2 = BeautifulSoup(r.text, "html.parser")
         text = soup2.get_text(separator="\n", strip=True)
@@ -99,19 +103,24 @@ def download_documents(url):
     return text, policy_link, consent_link, tech_markers, None
 
 def analyze_with_gigachat(text, tech_markers):
-    text_short = text[:12000] if text else "Текст отсутствует."
+    text_short = text[:10000] if text else "Текст отсутствует."
+    
     prompt = f"""
-Ты — строгий аудитор по защите персональных данных. Найди нарушения.
-БАЗА ЗНАНИЙ: {LAW_BASE}
+Ты — аудитор по 152-ФЗ, 149-ФЗ и 115-ФЗ. Найди нарушения и верни СПИСОК ID.
+НЕ ПИШИ законы. Только ID и короткую причину.
+
 ТЕКСТ: {text_short}
-ТЕХ. ДАННЫЕ: GA: {"Да" if tech_markers['google_analytics'] else "Нет"}, WA: {"Да" if tech_markers['whatsapp'] else "Нет"}, Хостинг: {"Да" if tech_markers['hosting'] else "Нет"}, Избранное: {"Да" if tech_markers['recommendations'] else "Нет"}
+ДАННЫЕ: GA: {"Да" if tech_markers['google_analytics'] else "Нет"}, WA: {"Да" if tech_markers['whatsapp'] else "Нет"}, Хостинг: {"Да" if tech_markers['hosting'] else "Нет"}, Избранное: {"Да" if tech_markers['recommendations'] else "Нет"}
+
+СПИСОК ID: {list(WEIGHTS.keys())}
 
 Ответь СТРОГО в JSON:
 {{
-  "findings": [ {{ "criteria_id": "ID из списка", "title": "...", "law": "...", "description": "..." }} ],
-  "recommendations": ["..."]
+  "findings": [
+    {{ "criteria_id": "ТОЧНОЕ НАЗВАНИЕ ИЗ СПИСКА", "reason": "Короткая причина (до 15 слов)" }}
+  ],
+  "recommendations": ["Действие 1", "Действие 2"]
 }}
-СПИСОК КРИТЕРИЕВ: {list(WEIGHTS.keys())}
 """
     try:
         response = giga.chat(prompt)
@@ -137,23 +146,52 @@ def get_risk_level(risk):
     if risk >= 0.25: return "Умеренный", "off"
     return "Допустимый", "normal"
 
-# --- ИНТЕРФЕЙС ---
-with st.sidebar:
-    st.markdown("### :material/account_balance: RegRisk Audit")
-    st.divider()
-    url_input = st.text_input("URL-адрес веб-ресурса", placeholder="https://example.ru")
-    start_audit = st.button("Инициировать аудит", type="primary", use_container_width=True)
-    st.divider()
-    st.caption("Модуль оценки соответствия 152-ФЗ, 149-ФЗ и 115-ФЗ. Расчет интегрального риска по методу взвешенной суммы.")
+# ==========================================
+# ИНТЕРФЕЙС
+# ==========================================
 
-if start_audit and url_input:
-    with st.spinner("Сканирование веб-ресурса и извлечение документов..."):
+# Стартовая страница, если аудит еще не запущен
+if "audit_started" not in st.session_state:
+    st.session_state.audit_started = False
+
+if not st.session_state.audit_started:
+    # Центрируем контент
+    col1, col2, col3 = st.columns([1, 2, 1])
+    with col2:
+        st.title(":material/account_balance: RegRisk Audit")
+        st.markdown("""
+        Система автоматизированного аудита веб-ресурсов на соответствие требованиям 
+        **152-ФЗ**, **149-ФЗ** и **115-ФЗ**.
+        """)
+        st.write("")
+        
+        with st.container(border=True):
+            st.subheader("Начать проверку")
+            url_input = st.text_input("URL-адрес сайта", placeholder="https://example.ru")
+            if st.button("Запустить аудит", type="primary", use_container_width=True):
+                if url_input:
+                    st.session_state.url_to_check = url_input
+                    st.session_state.audit_started = True
+                    st.rerun()
+                else:
+                    st.error("Введите URL")
+else:
+    # Экран результатов
+    url_input = st.session_state.url_to_check
+    
+    # Кнопка "Назад" в углу
+    if st.button("← Новый аудит", type="secondary"):
+        st.session_state.audit_started = False
+        st.session_state.url_to_check = ""
+        st.rerun()
+
+    with st.spinner("Сканирование и анализ..."):
         text, policy_url, consent_url, tech_markers, error = download_documents(url_input)
 
     if error:
         st.error(f"Критическая ошибка: {error}")
     else:
-        with st.spinner("Формирование юридического заключения..."):
+        with st.spinner("Формирование заключения..."):
             ai_result = analyze_with_gigachat(text, tech_markers)
 
         if ai_result:
@@ -161,105 +199,70 @@ if start_audit and url_input:
             final_risk = calculate_risk(findings)
             level_text, delta_col = get_risk_level(final_risk)
             
-            # --- ШАПКА ОТЧЕТА ---
             st.title("Отчет об аудите")
             
-            # Красивые ссылки в плашках
-            col_urls1, col_urls2, col_urls3 = st.columns(3)
-            with col_urls1:
-                st.info(f"**Объект аудита:**\n[{url_input}]({url_input})")
-            with col_urls2:
-                if policy_url:
-                    st.success(f"**Найдена Политика:**\n[{policy_url[:30]}...]({policy_url})")
-                else:
-                    st.error("**Политика не найдена**")
-            with col_urls3:
-                if consent_url:
-                    st.success(f"**Найдено Согласие:**\n[{consent_url[:30]}...]({consent_url})")
-                else:
-                    st.warning("**Отдельное Согласие не найдено**")
+            # Плашки со ссылками
+            c1, c2, c3 = st.columns(3)
+            with c1: st.info(f"**Объект:** [{url_input}]({url_input})")
+            with c2: 
+                if policy_url: st.success(f"**Политика:** [{policy_url[:25]}...]({policy_url})")
+                else: st.error("**Политика не найдена**")
+            with c3: 
+                if consent_url: st.success(f"**Согласие:** [{consent_url[:25]}...]({consent_url})")
+                else: st.warning("**Согласие не найдено**")
             
             st.divider()
             
-            # --- ВКЛАДКИ ---
-            tab1, tab2, tab3 = st.tabs(["📊 Дашборд рисков", "🧮 Математическая модель", "📑 Юридическое заключение"])
+            tab1, tab2, tab3 = st.tabs(["📊 Дашборд", "🧮 Математика", "📑 Заключение"])
 
             with tab1:
                 col_gauge, col_metrics = st.columns([1, 2])
-                
-                # График-спидометр
                 with col_gauge:
                     fig = go.Figure(go.Indicator(
-                        mode = "gauge+number",
-                        value = final_risk * 100,
-                        title = {'text': "Уровень риска (%)"},
+                        mode = "gauge+number", value = final_risk * 100, title = {'text': "Риск (%)"},
                         gauge = {
-                            'axis': {'range': [0, 100]},
-                            'bar': {'color': "#1E293B"},
+                            'axis': {'range': [0, 100]}, 'bar': {'color': "#1E293B"},
                             'steps': [
-                                {'range': [0, 25], 'color': "#D1FAE5"},
-                                {'range': [25, 50], 'color': "#FEF3C7"},
-                                {'range': [50, 75], 'color': "#FEE2E2"},
-                                {'range': [75, 100], 'color': "#FCA5A5"}
+                                {'range': [0, 25], 'color': "#D1FAE5"}, {'range': [25, 50], 'color': "#FEF3C7"},
+                                {'range': [50, 75], 'color': "#FEE2E2"}, {'range': [75, 100], 'color': "#FCA5A5"}
                             ],
                         }
                     ))
-                    fig.update_layout(margin=dict(l=20, r=20, t=40, b=20), height=250)
+                    fig.update_layout(margin=dict(l=10, r=10, t=30, b=10), height=220)
                     st.plotly_chart(fig, use_container_width=True)
                 
-                # Карточки
                 with col_metrics:
-                    st.markdown("### Результаты анализа")
+                    st.markdown("### Итоги")
                     st.metric(label="Интегральный риск", value=f"{final_risk:.2f}", delta=level_text, delta_color=delta_col)
-                    st.metric(label="Выявлено нарушений", value=len(findings))
-                    
-                    if final_risk > 0.5:
-                        st.error("**Рекомендация:** Незамедлительно устранить выявленные нарушения. Риск привлечения к ответственности по КоАП РФ крайне высок.")
-                    else:
-                        st.success("**Рекомендация:** Провести плановую доработку документов для исключения потенциальных рисков.")
+                    st.metric(label="Нарушений", value=len(findings))
 
             with tab2:
-                st.subheader("Расчет интегрального риска")
-                st.info("Модель: \(R = \\frac{\\sum (W_i \\times r_i)}{\\sum W_i}\)")
+                st.subheader("Расчет риска")
+                st.latex(r"R = \frac{\sum (W_i \times r_i)}{\sum W_i}")
                 data = []
                 found_ids = [f.get("criteria_id") for f in findings]
                 for crit, weight in WEIGHTS.items():
                     is_viol = 1 if crit in found_ids else 0
-                    data.append({"Критерий": crit, "Вес (W)": weight, "Нарушено (1/0)": is_viol, "Вклад в риск": weight if is_viol == 1 else 0})
+                    data.append({"Критерий": crit, "Вес (W)": weight, "Факт": is_viol, "Вклад": weight if is_viol == 1 else 0})
                 
                 df = pd.DataFrame(data)
-                # Раскрасим строки, где есть нарушения
-                st.dataframe(
-                    df.style.apply(lambda x: ['background: #FEE2E2' if v == 1 else '' for v in x], subset=['Нарушено (1/0)'], axis=1),
-                    use_container_width=True, hide_index=True
-                )
+                st.dataframe(df.style.apply(lambda x: ['background: #FEE2E2' if v == 1 else '' for v in x], subset=['Факт'], axis=1), use_container_width=True, hide_index=True)
 
             with tab3:
-                st.subheader("Детальное юридическое заключение")
+                st.subheader("Заключение")
                 if not findings:
-                    st.success("Нарушений не выявлено (по данным ИИ).")
+                    st.success("Нарушений не выявлено.")
                 for idx, finding in enumerate(findings, 1):
-                    with st.expander(f"{idx}. {finding.get('title')}", expanded=True):
-                        st.markdown(f"**Правовое обоснование:** \n> {finding.get('law')}")
-                        st.markdown(f"**Суть нарушения:** {finding.get('description')}")
+                    crit_id = finding.get("criteria_id")
+                    reason = finding.get("reason", "Нарушение.")
+                    law_info = LAW_DATABASE.get(crit_id, {"law": "См. законодательство РФ", "fine": "КоАП РФ"})
+                    
+                    with st.expander(f"{idx}. {crit_id}", expanded=True):
+                        st.markdown(f"**Норма:** {law_info['law']}")
+                        st.markdown(f"**Штраф:** :red[**{law_info['fine']}**]")
+                        st.markdown(f"**Причина:** {reason}")
                 
                 st.divider()
-                st.subheader("План мероприятий по устранению")
+                st.subheader("Рекомендации")
                 for rec in ai_result.get("recommendations", []):
                     st.markdown(f"- {rec}")
-
-elif start_audit and not url_input:
-    st.error("Введите URL-адрес.")
-else:
-    # Красивая стартовая страница
-    st.title("Система аудита регуляторных рисков")
-    st.markdown("""
-    Добро пожаловать в **RegRisk Audit**. 
-    
-    Система автоматически сканирует веб-ресурс, извлекает Политику обработки персональных данных и Согласие, а затем проводит аудит на соответствие требованиям **152-ФЗ, 149-ФЗ и КоАП РФ**.
-    
-    **Как начать:**
-    1. Введите URL сайта в левой панели.
-    2. Нажмите «Инициировать аудит».
-    3. Изучите спидометр риска и юридическое заключение.
-    """)
