@@ -8,6 +8,7 @@ import json
 import pandas as pd
 import plotly.graph_objects as go
 from gigachat import GigaChat
+plotly
 
 # --- 1. Конфигурация страницы ---
 st.set_page_config(
@@ -40,12 +41,21 @@ WEIGHTS = {
 
 # --- 3. Подключение к GigaChat ---
 @st.cache_resource
+import os
+
+@st.cache_resource
 def get_gigachat():
-    try:
-        key = st.secrets["GIGACHAT_KEY"]
-    except KeyError:
-        st.error("Ошибка конфигурации: Ключ GIGACHAT_KEY не найден в Secrets.")
-        st.stop()
+    # Пытаемся взять ключ из переменных окружения Layero
+    key = os.environ.get("GIGACHAT_KEY")
+    
+    # Если нет, пробуем взять из секретов Streamlit (на всякий случай)
+    if not key:
+        try:
+            key = st.secrets["GIGACHAT_KEY"]
+        except KeyError:
+            st.error("Ошибка: Ключ GIGACHAT_KEY не найден ни в переменных окружения, ни в Secrets.")
+            st.stop()
+            
     return GigaChat(
         credentials=key,
         scope="GIGACHAT_API_PERS",
