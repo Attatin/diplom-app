@@ -7,8 +7,8 @@ import re
 import json
 import pandas as pd
 import plotly.graph_objects as go
+import os
 from gigachat import GigaChat
-plotly
 
 # --- 1. Конфигурация страницы ---
 st.set_page_config(
