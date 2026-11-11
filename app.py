@@ -198,7 +198,7 @@ def analyze_with_gigachat(text, tech_markers):
         return {"findings": []}
 
     # Берем кусок текста (чтобы не перегружать контекст)
-    text_short = text[:12000]
+    text_short = text[:50000]
     
     # Формируем блок технических данных
     tech_data = f"""
